@@ -1,0 +1,91 @@
+#defineVMALLOC_OFFSET(8 * 1024 * 1024)
+
+#defineVMALLOC_START((unsigned long)high_memory+VMALLOC_OFFSET)
+
+VMALLOC_START定义了VMALLOC函数的起始分配位置 high_memory就是3G+896M。VMALLOC_OFFSET是一个偏移，主要为了留出空白防止越界，内核中定义为8M
+
+
+
+
+
+
+
+
+
+高端内存从3G+896M开始，分为三段，VMALLOC段，永久映射段，和固定映射段(又叫临时映射段)，从高往低，如果定义CONFIG_X86_32，则固定映射顶部FIXADDR_TOP直接定义为
+
+#defineFIXADDR_TOP((unsigned long)__FIXADDR_TOP)
+
+unsigned long__FIXADDR_TOP= 0xfffff000; // 空出一个页面
+
+否则FIXADDR_TOP定义  #defineFIXADDR_TOP(VSYSCALL_END-PAGE_SIZE)
+
+#defineVSYSCALL_END(-2UL << 20)  //先空出20M
+
+
+
+#defineFIXADDR_SIZE(__end_of_permanent_fixed_addresses<<PAGE_SHIFT)
+
+#defineFIXADDR_BOOT_SIZE(__end_of_fixed_addresses<<PAGE_SHIFT)
+
+#defineFIXADDR_START(FIXADDR_TOP-FIXADDR_SIZE)
+
+#defineFIXADDR_BOOT_START(FIXADDR_TOP-FIXADDR_BOOT_SIZE)
+
+此时定义了固定映射的起始
+
+__end_of_permanent_fixed_addresses
+
+__end_of_fixed_addresses
+
+这两个常量是一个枚举里面的两个常量，用于统计固定映射需要多少页面，较小的那个涵盖了每个CPU用到的，后面较大的还有一些别的页面，不是每个CPU独享的，较小的也有共享的页面
+
+enum fixed_addresses{  .............}
+
+
+
+#definePKMAP_BASE((FIXADDR_BOOT_START-PAGE_SIZE* (LAST_PKMAP+ 1)) &PMD_MASK)
+
+多空出一个页面，留出永久映射空间，永久映射空间的大小是一个页目录项。不开PAE是1024个页面，开了PAE是512个页面。
+
+如果定义了高端内存CONFIG_HIGHMEM
+
+# defineVMALLOC_END(PKMAP_BASE- 2 *PAGE_SIZE)
+
+空出两个页面就是VMALLOC_END
+
+如果没有定义高端内存
+
+# defineVMALLOC_END(FIXADDR_START- 2 *PAGE_SIZE)
+
+就没有永久映射的概念，直接固定映射减两个页面就可以了。
+
+
+
+
+
+总结:
+
+0    ====== 用户空间起始地址
+
+3G   =====  内核空间起始地址
+
+3G+869M  ===== 高端内存开始
+
+3G+896M+8M =====  VMALLOC_START 
+
+
+
+
+
+4G-一个页面 或者 4G-20M-一个页面  ======FIXADDR_TOP
+
+FIXADDR_TOP-固定映射大小  =====  FIXADDR_BOOT_START
+
+FIXADDR_BOOT_START- 一个页目录大小-一个页面 ===== PKMAP_BASE
+
+PKMAP_BASE-两个页面 ===== VMALLOC_END
+
+或者 没有定义高端内存
+
+FIXADDR_START-两个页面 ===== VMALLOC_END

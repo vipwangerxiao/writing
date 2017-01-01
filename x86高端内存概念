@@ -5,13 +5,6 @@
 VMALLOC_START定义了VMALLOC函数的起始分配位置 high_memory就是3G+896M。VMALLOC_OFFSET是一个偏移，主要为了留出空白防止越界，内核中定义为8M
 
 
-
-
-
-
-
-
-
 高端内存从3G+896M开始，分为三段，VMALLOC段，永久映射段，和固定映射段(又叫临时映射段)，从高往低，如果定义CONFIG_X86_32，则固定映射顶部FIXADDR_TOP直接定义为
 
 #defineFIXADDR_TOP((unsigned long)__FIXADDR_TOP)
@@ -21,7 +14,6 @@ unsigned long__FIXADDR_TOP= 0xfffff000; // 空出一个页面
 否则FIXADDR_TOP定义  #defineFIXADDR_TOP(VSYSCALL_END-PAGE_SIZE)
 
 #defineVSYSCALL_END(-2UL << 20)  //先空出20M
-
 
 
 #defineFIXADDR_SIZE(__end_of_permanent_fixed_addresses<<PAGE_SHIFT)
@@ -59,8 +51,6 @@ enum fixed_addresses{  .............}
 # defineVMALLOC_END(FIXADDR_START- 2 *PAGE_SIZE)
 
 就没有永久映射的概念，直接固定映射减两个页面就可以了。
-
-
 
 
 

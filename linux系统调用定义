@@ -1,0 +1,4 @@
+include/linux/syscalls.h  搜索原型 sys_open,查看是几个参数
+
+然后 grep ‘SYSCALL_DEFINE3(open’
+

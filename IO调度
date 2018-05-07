@@ -1,0 +1,2 @@
+request_queue和每个设备一一对应
+由设备初始化函数创建并初始化，其中 make_request_fn函数一般设置为blk_queue_bio(可能有误，仅供暂时参考)

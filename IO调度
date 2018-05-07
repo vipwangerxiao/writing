@@ -1,2 +1,19 @@
 request_queue和每个设备一一对应
 由设备初始化函数创建并初始化，其中 make_request_fn函数一般设置为blk_queue_bio(可能有误，仅供暂时参考)
+
+
+elevator_merge_fn --> elv_merge -->blk_queue_bio
+
+elevator_merged_fn --> elv_merged_request --> blk_queue_bio
+
+elevator_merge_req_fn --> elv_merge_requests --> attempt_merge --> attempt_back_merge  --> blk_queue_bio
+                                                               --> attempt_front_merge  --> blk_queue_bio
+                                                               --> blk_attempt_req_merge --> blk_queue_bio
+                                                               
+elevator_allow_bio_merge_fn --> elv_iosched_allow_bio_merge --> elv_bio_merge_ok --> elv_merge
+
+elevator_allow_rq_merge_fn --> blk_attempt_req_merge
+
+elevator_bio_merged_fn --> elv_bio_merged --> blk_queue_bio
+
+

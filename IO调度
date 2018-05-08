@@ -22,8 +22,9 @@ elevator_bio_merged_fn --> elv_bio_merged --> blk_queue_bio
 struct elevator_ops
 {
 	elevator_merge_fn *elevator_merge_fn;  //判断能否把bio合并到已经存在的request，返回前/后合并或者不能合并
-	elevator_merged_fn *elevator_merged_fn; //合并request后的操作
-	elevator_merge_req_fn *elevator_merge_req_fn; //合并request的动作
+						//在通用算法不能merge的情况下做具体调度算法特定的merge检测
+	elevator_merged_fn *elevator_merged_fn; //合并request后的操作,需要更改算法内部结构，比如删除多余的request
+	elevator_merge_req_fn *elevator_merge_req_fn; //合并request的动作,可能是删除一些request
 	elevator_allow_bio_merge_fn *elevator_allow_bio_merge_fn; //是允许合并bio
 	elevator_allow_rq_merge_fn *elevator_allow_rq_merge_fn; //是否允许合并request
 	elevator_bio_merged_fn *elevator_bio_merged_fn; //合并完bio后的操作

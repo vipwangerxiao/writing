@@ -17,3 +17,37 @@ elevator_allow_rq_merge_fn --> blk_attempt_req_merge
 elevator_bio_merged_fn --> elv_bio_merged --> blk_queue_bio
 
 
+
+
+struct elevator_ops
+{
+	elevator_merge_fn *elevator_merge_fn;  //判断能否把bio合并到已经存在的request，返回前/后合并或者不能合并
+	elevator_merged_fn *elevator_merged_fn; //合并request后的操作
+	elevator_merge_req_fn *elevator_merge_req_fn; //合并request的动作
+	elevator_allow_bio_merge_fn *elevator_allow_bio_merge_fn; //是允许合并bio
+	elevator_allow_rq_merge_fn *elevator_allow_rq_merge_fn; //是否允许合并request
+	elevator_bio_merged_fn *elevator_bio_merged_fn; //合并完bio后的操作
+
+	elevator_dispatch_fn *elevator_dispatch_fn; //分发算法队列中的请求
+	elevator_add_req_fn *elevator_add_req_fn; //添加req
+	elevator_activate_req_fn *elevator_activate_req_fn;//激活请求
+	elevator_deactivate_req_fn *elevator_deactivate_req_fn;//关闭请求
+
+	elevator_completed_req_fn *elevator_completed_req_fn; //merge 请求后的动作
+
+	elevator_request_list_fn *elevator_former_req_fn;
+	elevator_request_list_fn *elevator_latter_req_fn;
+
+	elevator_init_icq_fn *elevator_init_icq_fn;	/* see iocontext.h */
+	elevator_exit_icq_fn *elevator_exit_icq_fn;	/* ditto */
+
+	elevator_set_req_fn *elevator_set_req_fn;
+	elevator_put_req_fn *elevator_put_req_fn;
+
+	elevator_may_queue_fn *elevator_may_queue_fn;
+
+	elevator_init_fn *elevator_init_fn;
+	elevator_exit_fn *elevator_exit_fn;
+	elevator_registered_fn *elevator_registered_fn;
+};
+

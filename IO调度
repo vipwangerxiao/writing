@@ -52,3 +52,8 @@ struct elevator_ops
 	elevator_registered_fn *elevator_registered_fn;
 };
 
+
+
+
+多队列入口 blk_mq_make_request
+单独列入口 blk_queue_io

@@ -1,4 +1,24 @@
- 
+  7 /*  
+  8  * Tag address space map.
+  9  */ 
+ 10 struct blk_mq_tags {
+ 11     unsigned int nr_tags;
+ 12     unsigned int nr_reserved_tags;
+ 13 
+ 14     atomic_t active_queues;
+ 15 
+ 16     struct sbitmap_queue bitmap_tags;
+ 17     struct sbitmap_queue breserved_tags;
+ 18 
+ 19     struct request **rqs; 
+ 20     struct request **static_rqs; // 提前分配好的request，以tag号为索引
+ 21     struct list_head page_list;
+ 22 };       
+
+
+
+
+
  
 161 struct blk_mq_alloc_data {
 162     /* input parameter */
@@ -14,9 +34,147 @@
  
  
  
- 
- 
- 
+  137 /*
+ 138  * Try to put the fields that are referenced together in the same cacheline.
+ 139  *
+ 140  * If you modify this structure, make sure to update blk_rq_init() and
+ 141  * especially blk_mq_rq_ctx_init() to take care of the added fields.
+ 142  */
+ 143 struct request {
+ 144     struct request_queue *q;  //属于哪一个请求队列
+ 145     struct blk_mq_ctx *mq_ctx;  //属于哪个sw 队列
+ 146 
+ 147     int cpu;
+ 148     unsigned int cmd_flags;     /* op and common flags */
+ 149     req_flags_t rq_flags;
+ 150 
+ 151     int internal_tag;  //有调度算法的tag号，如果没有调度算法，则为-1
+ 152 
+ 153     /* the following two fields are internal, NEVER access directly */
+ 154     unsigned int __data_len;    /* total data len */
+ 155     int tag; // 没有调度算法的tag号，如果有调度算法，则为-1
+ 156     sector_t __sector;      /* sector cursor */
+ 157 
+ 158     struct bio *bio;
+ 159     struct bio *biotail;
+ 160 
+ 161     struct list_head queuelist;
+ 162 
+ 163     /*
+ 164      * The hash is used inside the scheduler, and killed once the
+ 165      * request reaches the dispatch list. The ipi_list is only used
+ 166      * to queue the request for softirq completion, which is long
+ 167      * after the request has been unhashed (and even removed from
+ 168      * the dispatch list).
+ 169      */
+ 170     union {
+ 171         struct hlist_node hash; /* merge hash */
+ 172         struct list_head ipi_list;
+ 173     };
+ 174 
+ 175     /*
+ 176      * The rb_node is only used inside the io scheduler, requests
+ 177      * are pruned when moved to the dispatch queue. So let the
+ 178      * completion_data share space with the rb_node.
+ 179      */
+ 180     union {
+ 181         struct rb_node rb_node; /* sort/lookup */
+ 182         struct bio_vec special_vec;
+ 183         void *completion_data;
+ 184         int error_count; /* for legacy drivers, don't use */
+ 185     };
+ 186 
+ 187     /*
+ 188      * Three pointers are available for the IO schedulers, if they need
+ 189      * more they have to dynamically allocate it.  Flush requests are
+ 190      * never put on the IO scheduler. So let the flush fields share
+ 191      * space with the elevator data.
+ 192      */
+ 193     union {
+ 194         struct {
+ 195             struct io_cq        *icq;
+ 196             void            *priv[2];
+ 197         } elv;
+ 198 
+ 199         struct {
+ 200             unsigned int        seq;
+ 201             struct list_head    list;
+ 202             rq_end_io_fn        *saved_end_io;
+ 203         } flush;
+ 204     };
+ 205 
+ 206     struct gendisk *rq_disk;
+ 207     struct hd_struct *part;
+ 208     unsigned long start_time;
+ 209     struct blk_issue_stat issue_stat;
+ 210     /* Number of scatter-gather DMA addr+len pairs after
+ 211      * physical address coalescing is performed.
+ 212      */
+ 213     unsigned short nr_phys_segments;
+ 214 
+ 215 #if defined(CONFIG_BLK_DEV_INTEGRITY)
+ 216     unsigned short nr_integrity_segments;
+ 217 #endif
+ 218 
+ 219     unsigned short write_hint;
+ 220     unsigned short ioprio;
+ 221 
+ 222     unsigned int timeout;
+ 223 
+ 224     void *special;      /* opaque pointer available for LLD use */
+ 225 
+ 226     unsigned int extra_len; /* length of alignment and padding */
+ 227 
+ 228     /*
+ 229      * On blk-mq, the lower bits of ->gstate (generation number and
+ 230      * state) carry the MQ_RQ_* state value and the upper bits the
+ 231      * generation number which is monotonically incremented and used to
+ 232      * distinguish the reuse instances.
+ 233      *
+ 234      * ->gstate_seq allows updates to ->gstate and other fields
+ 235      * (currently ->deadline) during request start to be read
+236      * atomically from the timeout path, so that it can operate on a
+ 237      * coherent set of information.
+ 238      */
+ 239     seqcount_t gstate_seq;
+ 240     u64 gstate;
+ 241 
+ 242     /*
+ 243      * ->aborted_gstate is used by the timeout to claim a specific
+ 244      * recycle instance of this request.  See blk_mq_timeout_work().
+ 245      */
+ 246     struct u64_stats_sync aborted_gstate_sync;
+ 247     u64 aborted_gstate;
+ 248 
+ 249     /* access through blk_rq_set_deadline, blk_rq_deadline */
+ 250     unsigned long __deadline;
+ 251 
+ 252     struct list_head timeout_list;
+ 253 
+ 254     union {
+ 255         struct __call_single_data csd;
+ 256         u64 fifo_time;
+ 257     };
+ 258 
+ 259     /*
+ 260      * completion callback.
+ 261      */
+ 262     rq_end_io_fn *end_io;  //回调函数
+ 263     void *end_io_data;
+ 264 
+ 265     /* for bidi */
+ 266     struct request *next_rq;
+ 267 
+ 268 #ifdef CONFIG_BLK_CGROUP
+ 269     struct request_list *rl;        /* rl this rq is alloced from */         // 属于那个request 链表
+ 270     unsigned long long start_time_ns;
+ 271     unsigned long long io_start_time_ns;    /* when passed to hardware */
+ 272 #endif
+ 273 };
+
+
+
+
  
  
  436 struct request_queue {
@@ -25,7 +183,7 @@
  439      */
  440     struct list_head    queue_head;
  441     struct request      *last_merge;
- 442     struct elevator_queue   *elevator;
+ 442     struct elevator_queue   *elevator;  // 是否有调度算法
  443     int         nr_rqs[2];  /* # allocated [a]sync rqs */
  444     int         nr_rqs_elvpriv; /* # allocated rqs w/ elvpriv */
  445 
@@ -58,18 +216,18 @@
  472     /* Called from inside blk_get_request() */
  473     void (*initialize_rq_fn)(struct request *rq);
  474 
- 475     const struct blk_mq_ops *mq_ops;
+ 475     const struct blk_mq_ops *mq_ops;   // mq ops
  476 
- 477     unsigned int        *mq_map;
+ 477     unsigned int        *mq_map;  // 影射表
  478 
  479     /* sw queues */
- 480     struct blk_mq_ctx __percpu  *queue_ctx;
+ 480     struct blk_\ __percpu  *queue_ctx;   // ctx队列,根据cpu取
  481     unsigned int        nr_queues;
  482 
  483     unsigned int        queue_depth;
  484 
  485     /* hw dispatch queues */
- 486     struct blk_mq_hw_ctx    **queue_hw_ctx;
+ 486     struct blk_mq_hw_ctx    **queue_hw_ctx;  // 被影射的硬件hctx
  487     unsigned int        nr_hw_queues;
  488 
  489     /*
@@ -214,7 +372,7 @@
  628     /*
  629      * for flush operations
  630      */
- 631     struct blk_flush_queue  *fq;
+ 631     struct blk_flush_queue  *fq;  // flush 队列
  632 
  633     struct list_head    requeue_list;
  634     spinlock_t      requeue_lock;

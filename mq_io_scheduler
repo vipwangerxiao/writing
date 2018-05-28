@@ -11,7 +11,7 @@ blk_mq_make_request
 
 
 快速动作有两个：一个是直接插入到hw队列，一个更快的是issue给驱动
-正常情况是想插入到sw队列，当然有plug可以先考虑plug机制，没有plug要先考虑调度算法
+正常情况是想插入到sw队列，当然有plug要先考虑plug机制，没有plug要先考虑调度算法，毕竟unplug后才会放到调度算法的势力范围
 
 
 

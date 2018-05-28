@@ -1,0 +1,262 @@
+ 
+ 
+161 struct blk_mq_alloc_data {
+162     /* input parameter */
+163     struct request_queue *q;
+164     blk_mq_req_flags_t flags;
+165     unsigned int shallow_depth;
+166 
+167     /* input & output parameter */
+168     struct blk_mq_ctx *ctx;
+169     struct blk_mq_hw_ctx *hctx;
+170 };   
+171 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 436 struct request_queue {
+ 437     /*
+ 438      * Together with queue_head for cacheline sharing
+ 439      */
+ 440     struct list_head    queue_head;
+ 441     struct request      *last_merge;
+ 442     struct elevator_queue   *elevator;
+ 443     int         nr_rqs[2];  /* # allocated [a]sync rqs */
+ 444     int         nr_rqs_elvpriv; /* # allocated rqs w/ elvpriv */
+ 445 
+ 446     atomic_t        shared_hctx_restart;
+ 447 
+ 448     struct blk_queue_stats  *stats;
+ 449     struct rq_wb        *rq_wb;
+ 450 
+ 451     /*
+ 452      * If blkcg is not used, @q->root_rl serves all requests.  If blkcg
+ 453      * is used, root blkg allocates from @q->root_rl and all other
+ 454      * blkgs from their own blkg->rl.  Which one to use should be
+ 455      * determined using bio_request_list().
+ 456      */
+ 457     struct request_list root_rl;
+ 458 
+ 459     request_fn_proc     *request_fn;
+ 460     make_request_fn     *make_request_fn;
+ 461     poll_q_fn       *poll_fn;
+ 462     prep_rq_fn      *prep_rq_fn;
+ 463     unprep_rq_fn        *unprep_rq_fn;
+ 464     softirq_done_fn     *softirq_done_fn;
+ 465     rq_timed_out_fn     *rq_timed_out_fn;
+ 466     dma_drain_needed_fn *dma_drain_needed;
+ 467     lld_busy_fn     *lld_busy_fn;
+ 468     /* Called just after a request is allocated */
+ 469     init_rq_fn      *init_rq_fn;
+ 470     /* Called just before a request is freed */
+ 471     exit_rq_fn      *exit_rq_fn;
+ 472     /* Called from inside blk_get_request() */
+ 473     void (*initialize_rq_fn)(struct request *rq);
+ 474 
+ 475     const struct blk_mq_ops *mq_ops;
+ 476 
+ 477     unsigned int        *mq_map;
+ 478 
+ 479     /* sw queues */
+ 480     struct blk_mq_ctx __percpu  *queue_ctx;
+ 481     unsigned int        nr_queues;
+ 482 
+ 483     unsigned int        queue_depth;
+ 484 
+ 485     /* hw dispatch queues */
+ 486     struct blk_mq_hw_ctx    **queue_hw_ctx;
+ 487     unsigned int        nr_hw_queues;
+ 488 
+ 489     /*
+ 490      * Dispatch queue sorting
+ 491      */
+ 492     sector_t        end_sector;
+ 493     struct request      *boundary_rq;
+ 494 
+ 495     /*
+ 496      * Delayed queue handling
+ 497      */
+ 498     struct delayed_work delay_work;
+ 499 
+ 500     struct backing_dev_info *backing_dev_info;
+ 501 
+ 502     /*
+ 503      * The queue owner gets to use this for whatever they like.
+ 504      * ll_rw_blk doesn't touch it.
+ 505      */
+ 506     void            *queuedata;
+ 507 
+ 508     /*
+ 509      * various queue flags, see QUEUE_* below
+ 510      */
+ 511     unsigned long       queue_flags;
+ 512 
+ 513     /*
+ 514      * ida allocated id for this queue.  Used to index queues from
+ 515      * ioctx.
+ 516      */
+ 517     int         id;
+ 518 
+ 519     /*
+ 520      * queue needs bounce pages for pages above this limit
+ 521      */
+ 522     gfp_t           bounce_gfp;
+ 523 
+ 524     /*
+ 525      * protects queue structures from reentrancy. ->__queue_lock should
+ 526      * _never_ be used directly, it is queue private. always use
+ 527      * ->queue_lock.
+ 528      */
+ 529     spinlock_t      __queue_lock;
+ 530     spinlock_t      *queue_lock;
+ 531 
+ 532     /*
+ 533      * queue kobject
+ 534      */
+ 535     struct kobject kobj;
+ 536 
+ 537     /*
+ 538      * mq queue kobject
+ 539      */
+ 540     struct kobject mq_kobj;
+ 541 
+ 542 #ifdef  CONFIG_BLK_DEV_INTEGRITY
+ 543     struct blk_integrity integrity;
+ 544 #endif  /* CONFIG_BLK_DEV_INTEGRITY */
+ 545 
+ 546 #ifdef CONFIG_PM
+ 547     struct device       *dev;
+ 548     int         rpm_status;
+ 549     unsigned int        nr_pending;
+ 550 #endif
+ 551 
+ 552     /*
+ 553      * queue settings
+ 554      */
+ 555     unsigned long       nr_requests;    /* Max # of requests */
+ 556     unsigned int        nr_congestion_on;
+ 557     unsigned int        nr_congestion_off;
+ 558     unsigned int        nr_batching;
+ 559 
+ 560     unsigned int        dma_drain_size;
+ 561     void            *dma_drain_buffer;
+ 562     unsigned int        dma_pad_mask;
+ 563     unsigned int        dma_alignment;
+ 564 
+ 565     struct blk_queue_tag    *queue_tags;
+ 566     struct list_head    tag_busy_list;
+ 567 
+ 568     unsigned int        nr_sorted;
+ 569     unsigned int        in_flight[2];
+ 570 
+ 571     /*
+ 572      * Number of active block driver functions for which blk_drain_queue()
+ 573      * must wait. Must be incremented around functions that unlock the
+ 574      * queue_lock internally, e.g. scsi_request_fn().
+ 575      */
+ 576     unsigned int        request_fn_active;
+ 577 
+ 578     unsigned int        rq_timeout;
+ 579     int         poll_nsec;
+ 580 
+ 581     struct blk_stat_callback    *poll_cb;
+ 582     struct blk_rq_stat  poll_stat[BLK_MQ_POLL_STATS_BKTS];
+ 583 
+ 584     struct timer_list   timeout;
+ 585     struct work_struct  timeout_work;
+ 586     struct list_head    timeout_list;
+ 587 
+ 588     struct list_head    icq_list;
+ 589 #ifdef CONFIG_BLK_CGROUP
+ 590     DECLARE_BITMAP      (blkcg_pols, BLKCG_MAX_POLS);
+ 591     struct blkcg_gq     *root_blkg;
+ 592     struct list_head    blkg_list;
+ 593 #endif
+  594 
+ 595     struct queue_limits limits;
+ 596 
+ 597     /*
+ 598      * Zoned block device information for request dispatch control.
+ 599      * nr_zones is the total number of zones of the device. This is always
+ 600      * 0 for regular block devices. seq_zones_bitmap is a bitmap of nr_zones
+ 601      * bits which indicates if a zone is conventional (bit clear) or
+ 602      * sequential (bit set). seq_zones_wlock is a bitmap of nr_zones
+ 603      * bits which indicates if a zone is write locked, that is, if a write
+ 604      * request targeting the zone was dispatched. All three fields are
+ 605      * initialized by the low level device driver (e.g. scsi/sd.c).
+ 606      * Stacking drivers (device mappers) may or may not initialize
+ 607      * these fields.
+ 608      *
+ 609      * Reads of this information must be protected with blk_queue_enter() /
+ 610      * blk_queue_exit(). Modifying this information is only allowed while
+ 611      * no requests are being processed. See also blk_mq_freeze_queue() and
+ 612      * blk_mq_unfreeze_queue().
+ 613      */
+ 614     unsigned int        nr_zones;
+ 615     unsigned long       *seq_zones_bitmap;
+ 616     unsigned long       *seq_zones_wlock;
+ 617 
+ 618     /*
+ 619      * sg stuff
+ 620      */
+ 621     unsigned int        sg_timeout;
+ 622     unsigned int        sg_reserved_size;
+ 623     int         node;
+ 624 #ifdef CONFIG_BLK_DEV_IO_TRACE
+ 625     struct blk_trace    *blk_trace;
+ 626     struct mutex        blk_trace_mutex;
+ 627 #endif
+ 628     /*
+ 629      * for flush operations
+ 630      */
+ 631     struct blk_flush_queue  *fq;
+ 632 
+ 633     struct list_head    requeue_list;
+ 634     spinlock_t      requeue_lock;
+ 635     struct delayed_work requeue_work;
+ 636 
+ 637     struct mutex        sysfs_lock;
+ 638 
+ 639     int         bypass_depth;
+ 640     atomic_t        mq_freeze_depth;
+ 641 
+ 642 #if defined(CONFIG_BLK_DEV_BSG)
+ 643     bsg_job_fn      *bsg_job_fn;
+ 644     struct bsg_class_device bsg_dev;
+ 645 #endif
+ 646 
+ 647 #ifdef CONFIG_BLK_DEV_THROTTLING
+ 648     /* Throttle data */
+ 649     struct throtl_data *td;
+ 650 #endif
+ 651     struct rcu_head     rcu_head;
+ 652     wait_queue_head_t   mq_freeze_wq;
+ 653     struct percpu_ref   q_usage_counter;
+ 654     struct list_head    all_q_node;
+ 655 
+ 656     struct blk_mq_tag_set   *tag_set;
+ 657     struct list_head    tag_set_list;
+ 658     struct bio_set      *bio_split;
+ 659 
+ 660 #ifdef CONFIG_BLK_DEBUG_FS
+ 661     struct dentry       *debugfs_dir;
+ 662     struct dentry       *sched_debugfs_dir;
+ 663 #endif
+ 664 
+ 665     bool            mq_sysfs_init_done;
+ 666 
+ 667     size_t          cmd_size;
+ 668     void            *rq_alloc_data;
+ 669 
+ 670     struct work_struct  release_work;
+ 671 
+ 672 #define BLK_MAX_WRITE_HINTS 5
+ 673     u64         write_hints[BLK_MAX_WRITE_HINTS];
+ 674 };
+
+

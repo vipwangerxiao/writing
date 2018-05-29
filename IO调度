@@ -57,3 +57,81 @@ struct elevator_ops
 
 多队列入口 blk_mq_make_request
 单独列入口 blk_queue_io
+
+
+ 97 /*
+ 98  * main unit of I/O for the block layer and lower layers (ie drivers and
+ 99  * stacking drivers)
+100  */
+101 struct bio {
+102     struct bio      *bi_next;   /* request queue link */
+103     struct gendisk      *bi_disk;
+104     unsigned int        bi_opf;     /* bottom bits req flags,
+105                          * top bits REQ_OP. Use
+106                          * accessors.
+107                          */
+108     unsigned short      bi_flags;   /* status, etc and bvec pool number */
+109     unsigned short      bi_ioprio;
+110     unsigned short      bi_write_hint;
+111     blk_status_t        bi_status;
+112     u8          bi_partno;
+113 
+114     /* Number of segments in this BIO after
+115      * physical address coalescing is performed.
+116      */
+117     unsigned int        bi_phys_segments;
+118 
+119     /*
+120      * To keep track of the max segment size, we account for the
+121      * sizes of the first and last mergeable segments in this bio.
+122      */
+123     unsigned int        bi_seg_front_size;
+124     unsigned int        bi_seg_back_size;
+125 
+126     struct bvec_iter    bi_iter;
+127 
+128     atomic_t        __bi_remaining;
+129     bio_end_io_t        *bi_end_io;
+130 
+131     void            *bi_private;
+132 #ifdef CONFIG_BLK_CGROUP
+133     /*
+134      * Optional ioc and css associated with this bio.  Put on bio
+135      * release.  Read comment on top of bio_associate_current().
+136      */
+137     struct io_context   *bi_ioc;
+138     struct cgroup_subsys_state *bi_css;
+139 #ifdef CONFIG_BLK_DEV_THROTTLING_LOW
+140     void            *bi_cg_private;
+141     struct blk_issue_stat   bi_issue_stat;
+142 #endif
+143 #endif
+144     union {
+145 #if defined(CONFIG_BLK_DEV_INTEGRITY)
+146         struct bio_integrity_payload *bi_integrity; /* data integrity */
+147 #endif
+148     };
+149 
+150     unsigned short      bi_vcnt;    /* how many bio_vec's */
+151 
+152     /*
+153      * Everything starting with bi_max_vecs will be preserved by bio_reset()
+154      */
+155 
+156     unsigned short      bi_max_vecs;    /* max bvl_vecs we can hold */
+157 
+158     atomic_t        __bi_cnt;   /* pin count */
+159 
+160     struct bio_vec      *bi_io_vec; /* the actual vec list */
+161 
+162     struct bio_set      *bi_pool;
+163 
+164     /*
+165      * We can inline a number of vecs at the end of the bio, to avoid
+166      * double allocations for a small number of bio_vecs. This member
+167      * MUST obviously be kept at the very end of the bio.
+168      */
+169     struct bio_vec      bi_inline_vecs[0];
+170 };
+171 
+

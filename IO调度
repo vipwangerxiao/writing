@@ -135,3 +135,27 @@ struct elevator_ops
 170 };
 171 
 
+
+
+ 30 struct bio_vec {
+ 31     struct page *bv_page;
+ 32     unsigned int    bv_len;
+ 33     unsigned int    bv_offset;
+ 34 };          
+ 35     
+ 36 struct bvec_iter {
+ 37     sector_t        bi_sector;  /* device address in 512 byte
+ 38                            sectors */
+ 39     unsigned int        bi_size;    /* residual I/O count */
+ 40     
+ 41     unsigned int        bi_idx;     /* current index into bvl_vec */
+ 42         
+ 43     unsigned int            bi_done;    /* number of bytes completed */
+ 44     
+ 45     unsigned int            bi_bvec_done;   /* number of bytes completed in
+ 46                            current bvec */
+ 47 };
+
+
+
+

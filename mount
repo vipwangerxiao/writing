@@ -1,1 +1,26 @@
+//系统调用入口
+3075 SYSCALL_DEFINE5(mount, char __user *, dev_name, char __user *, dir_name,
+3076                 char __user *, type, unsigned long, flags, void __user *, data)
+3077 {
+3078         return ksys_mount(dev_name, dir_name, type, flags, data);
+3079 }
+
+
+3041 int ksys_mount(char __user *dev_name, char __user *dir_name, char __user *type,
+3042                unsigned long flags, void __user *data)
+3043 {
+3044         int ret;
+3045         char *kernel_type;
+3046         char *kernel_dev;
+3047         void *options;
+
+3064         ret = do_mount(kernel_dev, dir_name, kernel_type, flags, options);
+
+3072         return ret;
+3073 }
+
+
+do_mount -> do_new_mount -> vfs_kerne_mount -> mount_fs ->
+
+1277         root = type->mount(type, flags, name, data);
 

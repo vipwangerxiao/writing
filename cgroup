@@ -4,3 +4,7 @@ cgroup_mount -> cgroup_do_mount -> kernfs_mount -> kernefs_mount_ns
 
 531 asmlinkage __visible void __init start_kernel(void)
 540         cgroup_init_early();
+
+
+kernfs_iop_mkdir(kernfs_init_inode中设置)
+cgroup_mkdir

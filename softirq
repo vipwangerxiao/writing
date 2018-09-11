@@ -60,3 +60,58 @@ tasklet_schedule函数会把tasklet_task放到tasklet_vec链表，不会有mark_
 290 }
 
  
+ 
+ 48 static struct softirq_action softirq_vec[32] __cacheline_aligned;
+ 49 
+ 50 asmlinkage void do_softirq()
+ 51 {
+ 52         int cpu = smp_processor_id();
+ 53         __u32 active, mask;
+ 54 
+ 55         if (in_interrupt())
+ 56                 return;
+ 57 
+ 58         local_bh_disable();
+ 59 
+ 60         local_irq_disable();
+ 61         mask = softirq_mask(cpu);
+ 62         active = softirq_active(cpu) & mask;
+ 63 
+ 64         if (active) {
+ 65                 struct softirq_action *h;
+ 66 
+ 67 restart:
+ 68                 /* Reset active bitmask before enabling irqs */
+ 69                 softirq_active(cpu) &= ~active;
+ 70 
+ 71                 local_irq_enable();
+ 72 
+ 73                 h = softirq_vec;
+ 74                 mask &= ~active;
+ 75 
+ 76                 do {
+ 77                         if (active & 1)
+ 78                                 h->action(h);
+ 79                         h++;
+ 80                         active >>= 1;
+ 81                 } while (active);
+ 82 
+ 83                 local_irq_disable();
+ 84 
+ 85                 active = softirq_active(cpu);
+ 86                 if ((active &= mask) != 0)
+ 87                         goto retry;
+ 88         }
+ 89 
+ 90         local_bh_enable();
+ 91 
+ 92         /* Leave with locally disabled hard irqs. It is critical to close
+ 93          * window for infinite recursion, while we help local bh count,
+ 94          * it protected us. Now we are defenceless.
+ 95          */
+ 96         return;
+ 97 
+ 98 retry:
+ 99         goto restart;
+100 }
+

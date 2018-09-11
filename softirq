@@ -1,0 +1,62 @@
+每个CPU有个结构,记录软中断的发生状态
+45 irq_cpustat_t irq_stat[NR_CPUS];
+
+  8 /* entry.S is sensitive to the offsets of these fields */
+  9 typedef struct {
+ 10         unsigned int __softirq_active;      //软中断请求位
+ 11         unsigned int __softirq_mask;        //软中断屏蔽位
+ 12         unsigned int __local_irq_count;
+ 13         unsigned int __local_bh_count;
+ 14         unsigned int __syscall_count;
+ 15         unsigned int __nmi_count;       /* arch dependent */
+ 16 } ____cacheline_aligned irq_cpustat_t;
+ 
+ 
+ //目前有下面几种软中断类型
+ 56 enum
+ 57 {
+ 58         HI_SOFTIRQ=0,               //实现bh机制，服务函数为tasklet_hi_action
+ 59         NET_TX_SOFTIRQ, 
+ 60         NET_RX_SOFTIRQ,
+ 61         TASKLET_SOFTIRQ             // 服务函数为tasklet_action
+ 62 };   
+ 
+ 167 struct tasklet_head tasklet_hi_vec[NR_CPUS] __cacheline_aligned;
+ tasklet_hi_action会搜寻 tasklet_hi_vec队列,调用tasklet_struct中的二级服务函数。
+ 二级服务函数都被设置成bh_action 进而访问三级服务函数bh_base函数指针。
+ 为什么都是bh_action,因为mark_bh()函数发起软中断的时候,会把bh_base_vec中的tasklet_struct放入到当前CPU的tasklet_hi_vec数组。
+ 232 static inline void mark_bh(int nr)
+233 {
+234         tasklet_hi_schedule(bh_task_vec+nr);
+235 }
+
+171 static inline void tasklet_hi_schedule(struct tasklet_struct *t)
+172 {
+173         if (!test_and_set_bit(TASKLET_STATE_SCHED, &t->state)) {
+174                 int cpu = smp_processor_id();
+175                 unsigned long flags;
+176 
+177                 local_irq_save(flags);
+178                 t->next = tasklet_hi_vec[cpu].list;
+179                 tasklet_hi_vec[cpu].list = t;
+180                 __cpu_raise_softirq(cpu, HI_SOFTIRQ);
+181                 local_irq_restore(flags);
+182         }
+183 }
+
+ 
+122 struct tasklet_head tasklet_vec[NR_CPUS] __cacheline_aligned;
+tasklet_schedule函数会把tasklet_task放到tasklet_vec链表，不会有mark_bh类似的函数，直接挂入即可，并标记TASKLET_SOFTIRQ。
+
+ 281 void __init softirq_init()
+282 {
+283         int i;
+284 
+285         for (i=0; i<32; i++)
+286                 tasklet_init(bh_task_vec+i, bh_action, i);
+287 
+288         open_softirq(TASKLET_SOFTIRQ, tasklet_action, NULL);
+289         open_softirq(HI_SOFTIRQ, tasklet_hi_action, NULL);
+290 }
+
+ 

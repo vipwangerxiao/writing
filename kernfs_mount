@@ -1,0 +1,261 @@
+182 struct kernfs_root {
+183         /* published fields */
+184         struct kernfs_node      *kn;    //节点，
+185         unsigned int            flags;  /* KERNFS_ROOT_* flags */
+186 
+187         /* private fields, do not use outside kernfs proper */
+188         struct idr              ino_idr;
+189         u32                     next_generation;
+190         struct kernfs_syscall_ops *syscall_ops;    //创建目录，删除目录和重命名等操作
+191 
+192         /* list of kernfs_super_info of this root, protected by kernfs_mutex */
+193         struct list_head        supers;
+194 
+195         wait_queue_head_t       deactivate_waitq;
+196 };
+197 
+
+
+ 51 struct kernfs_super_info {
+ 52         struct super_block      *sb;     //对应超级块
+ 53 
+ 54         /*
+ 55          * The root associated with this super_block.  Each super_block is
+ 56          * identified by the root and ns it's associated with.
+ 57          */
+ 58         struct kernfs_root      *root;  //对应的kernfs_root
+ 59 
+ 60         /*
+ 61          * Each sb is associated with one namespace tag, currently the
+ 62          * network namespace of the task which mounted this kernfs
+ 63          * instance.  If multiple tags become necessary, make the following
+ 64          * an array and compare kernfs_node tag against every entry.
+ 65          */
+ 66         const void              *ns;
+ 67 
+ 68         /* anchored at kernfs_root->supers, protected by kernfs_mutex */
+ 69         struct list_head        node;  //链接在kernfs_root的super链表上
+ 70 };
+
+548 static inline struct dentry *
+549 kernfs_mount(struct file_system_type *fs_type, int flags,
+550                 struct kernfs_root *root, unsigned long magic,
+551                 bool *new_sb_created)
+552 {
+553         return kernfs_mount_ns(fs_type, flags, root,
+554                                 magic, new_sb_created, NULL);
+555 }
+
+
+305 struct dentry *kernfs_mount_ns(struct file_system_type *fs_type, int flags,
+306                                 struct kernfs_root *root, unsigned long magic,
+307                                 bool *new_sb_created, const void *ns)
+308 {
+309         struct super_block *sb;
+310         struct kernfs_super_info *info;
+311         int error;
+312 
+313         info = kzalloc(sizeof(*info), GFP_KERNEL);
+314         if (!info)
+315                 return ERR_PTR(-ENOMEM);
+316 
+317         info->root = root;   //把kernfs_root 加入
+318         info->ns = ns;
+319         INIT_LIST_HEAD(&info->node);
+320 
+321         sb = sget_userns(fs_type, kernfs_test_super, kernfs_set_super, flags,   
+322                          &init_user_ns, info);                //设置文件系统类型，kern_fs_info, 和默认操作
+323         if (IS_ERR(sb) || sb->s_fs_info != info)
+324                 kfree(info);
+325         if (IS_ERR(sb))
+326                 return ERR_CAST(sb);
+327 
+328         if (new_sb_created)
+329                 *new_sb_created = !sb->s_root;
+330 
+331         if (!sb->s_root) {
+332                 struct kernfs_super_info *info = kernfs_info(sb);
+333 
+334                 error = kernfs_fill_super(sb, magic);
+335                 if (error) {
+336                         deactivate_locked_super(sb);
+337                         return ERR_PTR(error);
+338                 }
+339                 sb->s_flags |= SB_ACTIVE;
+340 
+341                 mutex_lock(&kernfs_mutex);
+342                 list_add(&info->node, &root->supers);
+343                 mutex_unlock(&kernfs_mutex);
+344         }
+345 
+346         return dget(sb->s_root);
+347 }
+
+
+486 struct super_block *sget_userns(struct file_system_type *type,
+ 487                         int (*test)(struct super_block *,void *),
+ 488                         int (*set)(struct super_block *,void *),
+ 489                         int flags, struct user_namespace *user_ns,
+ 490                         void *data)
+ 491 {
+ 492         struct super_block *s = NULL;
+ 493         struct super_block *old;
+ 494         int err;
+ 495 
+ 496         if (!(flags & (SB_KERNMOUNT|SB_SUBMOUNT)) &&
+ 497             !(type->fs_flags & FS_USERNS_MOUNT) &&
+ 498             !capable(CAP_SYS_ADMIN))
+ 499                 return ERR_PTR(-EPERM);
+ 500 retry:
+ 501         spin_lock(&sb_lock);
+ 502         if (test) {                           //查看是否有相同的kernfs_root已经存在
+ 503                 hlist_for_each_entry(old, &type->fs_supers, s_instances) {
+ 504                         if (!test(old, data))
+ 505                                 continue;
+ 506                         if (user_ns != old->s_user_ns) {
+ 507                                 spin_unlock(&sb_lock);
+ 508                                 destroy_unused_super(s);
+ 509                                 return ERR_PTR(-EBUSY);
+ 510                         }
+ 511                         if (!grab_super(old))
+ 512                                 goto retry;
+ 513                         destroy_unused_super(s);
+ 514                         return old;
+ 515                 }
+ 516         }
+ 517         if (!s) {
+ 518                 spin_unlock(&sb_lock);
+ 519                 s = alloc_super(type, (flags & ~SB_SUBMOUNT), user_ns);       //分配超级块内存，设置 s->s_op = &default_op
+ 520                 if (!s)
+ 521                         return ERR_PTR(-ENOMEM);
+ 522                 goto retry;
+ 523         }
+ 524 
+ 525         err = set(s, data);            // s->s_fs_info = data 就是kerfs_super_info
+ 526         if (err) {
+ 527                 spin_unlock(&sb_lock);
+ 528                 destroy_unused_super(s);
+ 529                 return ERR_PTR(err);
+ 530         }
+ 531         s->s_type = type;       //设置文件系统
+ 532         strlcpy(s->s_id, type->name, sizeof(s->s_id));
+ 533         list_add_tail(&s->s_list, &super_blocks);
+ 534         hlist_add_head(&s->s_instances, &type->fs_supers);
+ 535         spin_unlock(&sb_lock);
+ 536         get_filesystem(type);
+ 537         register_shrinker_prepared(&s->s_shrink);
+ 538         return s;
+ 539 }
+
+
+
+
+
+
+
+
+
+
+221 static int kernfs_fill_super(struct super_block *sb, unsigned long magic)
+222 {
+223         struct kernfs_super_info *info = kernfs_info(sb);
+224         struct inode *inode;
+225         struct dentry *root;
+226 
+227         info->sb = sb;      //kern_fs_info联系到超级块
+228         /* Userspace would break if executables or devices appear on sysfs */
+229         sb->s_iflags |= SB_I_NOEXEC | SB_I_NODEV;
+230         sb->s_blocksize = PAGE_SIZE;
+231         sb->s_blocksize_bits = PAGE_SHIFT;
+232         sb->s_magic = magic;
+233         sb->s_op = &kernfs_sops;   // 更改操作
+234         sb->s_xattr = kernfs_xattr_handlers;
+235         if (info->root->flags & KERNFS_ROOT_SUPPORT_EXPORTOP)
+236                 sb->s_export_op = &kernfs_export_ops;
+237         sb->s_time_gran = 1;
+238 
+239         /* get root inode, initialize and unlock it */
+240         mutex_lock(&kernfs_mutex);
+241         inode = kernfs_get_inode(sb, info->root->kn);      //分配inode是用sb->s_op->alloc_inode函数，前面已经设置成kernfs_sops,但是没有alloc_inode函数
+242         mutex_unlock(&kernfs_mutex);
+243         if (!inode) {
+244                 pr_debug("kernfs: could not get root inode\n");
+245                 return -ENOMEM;
+246         }
+247 
+248         /* instantiate and link root dentry */
+249         root = d_make_root(inode);  //创建一个dentry和inode关联
+250         if (!root) {
+251                 pr_debug("%s: could not get root dentry!\n", __func__);
+252                 return -ENOMEM;
+253         }
+254         sb->s_root = root;
+255         sb->s_d_op = &kernfs_dops;  //dentry的操作结构
+256         return 0;
+257 }
+
+
+265 struct inode *kernfs_get_inode(struct super_block *sb, struct kernfs_node *kn)
+266 {
+267         struct inode *inode;
+268 
+269         inode = iget_locked(sb, kn->id.ino);  //得到默认的inode
+270         if (inode && (inode->i_state & I_NEW))
+271                 kernfs_init_inode(kn, inode);  //初始化为kernfs相关，i_private,i_mapping->a_ops，i_op, i_fop
+272 
+273         return inode;
+274 }
+
+217 static void kernfs_init_inode(struct kernfs_node *kn, struct inode *inode)
+218 {
+219         kernfs_get(kn);
+220         inode->i_private = kn;
+221         inode->i_mapping->a_ops = &kernfs_aops;
+222         inode->i_op = &kernfs_iops;
+223         inode->i_generation = kn->id.generation;
+224 
+225         set_default_inode_attr(inode, kn->mode);
+226         kernfs_refresh_inode(kn, inode);
+227 
+228         /* initialize inode according to type */
+229         switch (kernfs_type(kn)) {
+230         case KERNFS_DIR:
+231                 inode->i_op = &kernfs_dir_iops;
+232                 inode->i_fop = &kernfs_dir_fops;
+233                 if (kn->flags & KERNFS_EMPTY_DIR)
+234                         make_empty_dir_inode(inode);
+235                 break;
+236         case KERNFS_FILE:
+237                 inode->i_size = kn->attr.size;
+238                 inode->i_fop = &kernfs_file_fops;
+239                 break;
+240         case KERNFS_LINK:
+241                 inode->i_op = &kernfs_symlink_iops;
+242                 break;
+243         default:
+244                 BUG();
+245         }
+246 
+247         unlock_new_inode(inode);
+248 }
+249 
+
+
+1900 struct dentry *d_make_root(struct inode *root_inode)
+1901 {
+1902         struct dentry *res = NULL;
+1903                
+1904         if (root_inode) {
+1905                 res = d_alloc_anon(root_inode->i_sb);  //和super挂钩
+1906                 if (res) {
+1907                         res->d_flags |= DCACHE_RCUACCESS;
+1908                         d_instantiate(res, root_inode);  dentry->d_inode = inode
+1909                 } else {
+1910                         iput(root_inode);
+1911                 }
+1912         }      
+1913         return res;
+1914 }
+
+
+ 

@@ -10,3 +10,10 @@ kernfs_iop_mkdir(kernfs_init_inode中设置)
 cgroup_mkdir
 
 cgroup_init_early 和 cgroup_init 会做初始化
+
+cgroup_init_early:
+初始化默认层级struct cgroup_root cgrp_dfl_root,
+循环遍历所有子系统，设置id和名字，看看层级有没有early_init函数，执行自己的早期初始化。
+
+cgroup_init
+初始化struct cftype cgroup_base_files[]和struct cftype cgroup1_base_files[];

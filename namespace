@@ -1,0 +1,31 @@
+每个task_struct结构中有
+struct task_truct {
+
+
+struct pid *thread_pid;   //当前task_struct的作为pid(相对于pgid，tgid，sid)的pid结构
+struct task_struct * group_leader;  
+struct pid_t pid;            //在全局命名空间的pid号
+struct pit_t tgid;           //在全局命名空间的线程组号
+struct hlist_node pid_links[PIDTYPE_MAX];  //使用那些pid结构，被链起来的地方
+
+struct signal_struct *signal;
+}
+
+struct signal_struct {
+
+struct pid *pids[PIDTYPE_MAX];
+
+}
+
+enum pid_type
+{
+  PIDTYPE_PID,
+  PIDTYPE_TGID,
+  PIDTYPE_PGID,
+  PIDTYPE_SID,
+  PIDTYPE_MAX,
+}
+
+每个task_struct里有几个指向pid结构的指针，代表了当前任务进程组组长的pid结构，线程组组长的pid结构，会话组组长的pid结构
+
+每个pid结构又包含了自己在对应命名空间的pid号，当前是几层，还有就是包括指向自己的进程链

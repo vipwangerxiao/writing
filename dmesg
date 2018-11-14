@@ -1,11 +1,14 @@
 external/toybox/toys/lsb/dmesg.c 
-如果没有指明用syslog系统调用，就用/dev/kmsg
+如果没有指明用syslog系统调用，就用/dev/kmsg,打开文件的时候会初始化user->idx,这个值需要再再一次重定位，依据clear_idx，
+所以dmesg命令会故步自封，每次看clear_idx, dmesg -c 会调用sys_log系统调用设置clear_idx，这样下次dmesg就读不到之前的内容了
 
 kernel/msm-4.14/fs/proc/kmsg.c 
 /proc/kmsg 读取这个用的是syslog系统调用，指明 SYSLOG_FROM_PROC
-所以计算剩余字符数的使用的是单独一个指针，这样每次读完更新这个指针，多个读操作更新同一个指针
+所以计算剩余字符数的使用的是单独一个指针syslog_idx，这样每次读完更新这个指针，多个读操作更新同一个指针
 看起来就是读完就删除了
 
 /dev/kmsg
-读这个计算的字符数就是实际剩余的字符数
-也可以写入内核log
+读这个计算的字符数就是实际剩余的字符数,每次读的时候初始化user->idx = log_first_idx，就是有多少读多少。
+而且因为是另外打开的文件，和dmesg -c不是同一个file结构，所以 dmesg -c 不会影响/dev/kmsg
+
+也可以写入内核log,相当于printk

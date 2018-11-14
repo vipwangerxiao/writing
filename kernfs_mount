@@ -246,7 +246,7 @@
 1902         struct dentry *res = NULL;
 1903                
 1904         if (root_inode) {
-1905                 res = d_alloc_anon(root_inode->i_sb);  //和super挂钩
+1905                 res = d_alloc_anon(root_inode->i_sb);  //和super挂钩,d_set_d_op(dentry, dentry->d_sb->s_d_op); kernfs_dops
 1906                 if (res) {
 1907                         res->d_flags |= DCACHE_RCUACCESS;
 1908                         d_instantiate(res, root_inode);  dentry->d_inode = inode

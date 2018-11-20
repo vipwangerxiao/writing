@@ -17,3 +17,5 @@ cgroup_init_early:
 
 cgroup_init
 初始化struct cftype cgroup_base_files[]和struct cftype cgroup1_base_files[];
+
+cgrp_dfl_root只是v2用，v1会自己分配该结构体

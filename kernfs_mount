@@ -211,7 +211,7 @@
 219         kernfs_get(kn);
 220         inode->i_private = kn;
 221         inode->i_mapping->a_ops = &kernfs_aops;
-222         inode->i_op = &kernfs_iops;
+222         inode->i_op = &kernfs_iops;  //设置一个默认的操作，目录和文件都可以用
 223         inode->i_generation = kn->id.generation;
 224 
 225         set_default_inode_attr(inode, kn->mode);
@@ -220,7 +220,7 @@
 228         /* initialize inode according to type */
 229         switch (kernfs_type(kn)) {
 230         case KERNFS_DIR:
-231                 inode->i_op = &kernfs_dir_iops;
+231                 inode->i_op = &kernfs_dir_iops;  //目录的操作多，覆盖
 232                 inode->i_fop = &kernfs_dir_fops;
 233                 if (kn->flags & KERNFS_EMPTY_DIR)
 234                         make_empty_dir_inode(inode);

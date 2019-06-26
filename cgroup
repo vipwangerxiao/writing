@@ -21,4 +21,4 @@ cgroup_init
 cgrp_dfl_root只是v2用，v1会自己分配该结构体
 
 子系统命名格式
-struct cgroup_subsysname_cgrp_subsys
+struct cgroup_subsys name_cgrp_subsys
